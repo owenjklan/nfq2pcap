@@ -4,7 +4,7 @@
 // The following online resources were used in developing this program:
 // https://www.apriorit.com/dev-blog/598-linux-mitm-nfqueue
 // https://netfilter.org/projects/libnetfilter_queue/doxygen/group__Queue.html
-
+// https://www.tcpdump.org/linktypes.html
 
 #include <stdio.h>
 #include <stdint.h>
@@ -34,27 +34,60 @@ void usage(char *progname) {
     fprintf(stderr, "  -q queue       NFQUEUE ID to read packets from. Default: %d\n", DEFAULT_QUEUE_ID);
 }
 
+// Prepend a custom constructed link layer header to the payload data that
+// was pulled from the netlink/nfqueue stuctures for the packet.
+// If there is an issue allocating memory we just exit.
+// Returns a re-malloc'ed structure that needs to be free'd by the caller.
+unsigned char *prepend_link_header(unsigned char *ll_hdr,
+                          int ll_len,
+                          unsigned char *payload,
+                          int payload_len)
+{
+    int total_len = ll_len + payload_len;
+
+    unsigned char *return_buffer = malloc(total_len);
+
+    if (!return_buffer) {
+        error_msg("Failed allocating buffer space for link layer manipulation!\n");
+        exit(1);
+    }
+
+    memcpy(return_buffer, ll_hdr, ll_len);
+    memcpy(return_buffer + ll_len, payload, payload_len);
+
+    return return_buffer;
+}
+
+// This function does all the work to write a packet to the pcap file
 int queue_callback(struct nfq_q_handle *nfq_h,
                    struct nfgenmsg *nfmsg,
                    struct nfq_data *nfad,
                    void *data)
 {
+    uint32_t null_header = 2;  // 2 -> IPv4 packets
     struct nfqnl_msg_packet_hdr *ph = nfq_get_msg_packet_hdr(nfad);
     pcap_dumper_t *pcap_writer = (pcap_dumper_t *)data;
-    // struct nfqnl_msg_packet_hdr *ph = nfq_get_msg_packet_hdr(nfad);
 
     unsigned char *raw_data = NULL;
 
     int packet_len = nfq_get_payload(nfad, &raw_data);
+
+    // 'Final', as in, we've pre-pended the fake link layer header
+    unsigned char *final_payload = prepend_link_header((unsigned char *)&null_header,
+                                              sizeof(null_header),
+                                              raw_data,
+                                              packet_len);
+    int final_len = sizeof(null_header) + packet_len;
 
     struct pcap_pkthdr header;
     struct timeval ts;
     gettimeofday(&ts, NULL);
 
     header.ts = ts;
-    header.caplen = header.len = packet_len;
+    header.caplen = header.len = final_len;
 
-    pcap_dump((u_char *)pcap_writer, &header, raw_data);
+    pcap_dump((u_char *)pcap_writer, &header, final_payload);
+    free(final_payload);
     pcap_dump_flush(pcap_writer);
 
     return nfq_set_verdict(nfq_h, ntohl(ph->packet_id), NF_ACCEPT, 0, NULL);
@@ -90,7 +123,9 @@ int main(int argc, char *argv[])
     char *output_filename = argv[1];
 
     // Open Pcap file and handles for writing packets out using pcap_dump()
-    pcap_t *pcap_h = pcap_open_dead(DLT_EN10MB, 65536);
+    // We're going to use DLT_NULL, as we won't have Ethernet frame headers
+    // coming off an NFQUEUE
+    pcap_t *pcap_h = pcap_open_dead(DLT_NULL, 65536);
     if (!pcap_h) {
         error_msg("Failed opening '%s' as pcap output file! %s.\n",
             output_filename, pcap_errbuff);

@@ -111,7 +111,7 @@ int queue_callback(struct nfq_q_handle *nfq_h,
 
     if (verdict == NF_QUEUE) {
         // The queue to direct to is in upper 16-bits of the verdict we set
-        verdict = NF_QUEUE_NR(((callback_args *)data)->queue_num);
+        verdict = NF_QUEUE_NR(((callback_args *)data)->target_queue);
     }
 
     return nfq_set_verdict(nfq_h, ntohl(ph->packet_id), verdict, 0, NULL);

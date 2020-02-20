@@ -1,0 +1,25 @@
+PROGNAME=nfq2pcap
+CC=gcc
+CFLAGS=-Wall -O2 -g
+OBJS=nfq2pcap.c
+LIBS=-lc -lpcap -lnetfilter_queue
+
+.c.o:
+	$(CC) -c $< -o $@ $(CFLAGS)
+
+all: $(OBJS)
+	$(CC) $(OBJS) $(CFLAGS) $(LIBS)  -o $(PROGNAME)
+
+debug: $(OBJS)
+	$(CC) $(OBJS) $(CFLAGS) -DDEBUG $(LIBS) -o $(PROGNAME)
+
+clean-all: clean
+	rm -f *.pcap
+
+clean:
+	rm -f *.o
+	rm -f $(PROGNAME)
+	rm -f *~
+
+install:
+	cp $(PROGNAME) /usr/local/bin

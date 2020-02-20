@@ -23,3 +23,4 @@ clean:
 
 install:
 	cp $(PROGNAME) /usr/local/bin
+	install nfq2pcap.1 /usr/share/man/man1/nfq2pcap.1

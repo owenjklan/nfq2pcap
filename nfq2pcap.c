@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <unistd.h>
+#include <unistd.h>         // wanted for getopt() and others
 #include <time.h>
 #include <sys/time.h>
 #include <sys/select.h>
@@ -28,10 +28,13 @@ void usage(char *progname) {
     fprintf(stderr, "USAGE:\n");
     fprintf(stderr, "  %s output [-q queue]\n\n", progname);
     fprintf(stderr, "Where:\n");
-    fprintf(stderr, "  \033[1moutput\033[0m is the name of the output Pcap file\n");
+    fprintf(stderr,
+        "  \033[1moutput\033[0m is the name of the output Pcap file\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "Options:\n");
-    fprintf(stderr, "  -q queue       NFQUEUE ID to read packets from. Default: %d\n", DEFAULT_QUEUE_ID);
+    fprintf(stderr,
+        "  -q queue       NFQUEUE ID to read packets from. Default: %d\n",
+        DEFAULT_QUEUE_ID);
 }
 
 // Prepend a custom constructed link layer header to the payload data that
@@ -66,7 +69,8 @@ int queue_callback(struct nfq_q_handle *nfq_h,
 {
     uint32_t null_header = 2;  // 2 -> IPv4 packets
     struct nfqnl_msg_packet_hdr *ph = nfq_get_msg_packet_hdr(nfad);
-    pcap_dumper_t *pcap_writer = (pcap_dumper_t *)data;
+    pcap_dumper_t *pcap_writer = ((callback_args *)data)->dumper;
+    uint32_t verdict = ((callback_args *)data)->verdict;
 
     unsigned char *raw_data = NULL;
 
@@ -90,18 +94,23 @@ int queue_callback(struct nfq_q_handle *nfq_h,
     free(final_payload);
     pcap_dump_flush(pcap_writer);
 
-    return nfq_set_verdict(nfq_h, ntohl(ph->packet_id), NF_ACCEPT, 0, NULL);
+    if (verdict == NF_QUEUE) {
+        // The queue to direct to is in upper 16-bits of the verdict we set
+        verdict = NF_QUEUE_NR(((callback_args *)data)->queue_num);
+    }
+
+    return nfq_set_verdict(nfq_h, ntohl(ph->packet_id), verdict, 0, NULL);
 };
 
 struct nfq_q_handle *open_queue_or_exit(struct nfq_handle *nfq_lib_ctx,
                                         uint16_t queue_num,
-                                        pcap_dumper_t *dumper)
+                                        callback_args *cb_args)
 {
     // Create our queue handle
     struct nfq_q_handle *nfq_h = nfq_create_queue(nfq_lib_ctx,
                                                   queue_num,
                                                   queue_callback,
-                                                  (void *)dumper);
+                                                  (void *)cb_args);
     if (!nfq_h) {
         error_msg("Failed opening queue %d! %s\n",
                   queue_num, strerror(errno));
@@ -147,9 +156,15 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    int queue_num = DEFAULT_QUEUE_ID;
+    uint32_t queue_num = DEFAULT_QUEUE_ID;
 
-    struct nfq_q_handle *queue = open_queue_or_exit(nfq_lib_ctx, queue_num, pcap_writer);
+    callback_args cb_args;
+
+    cb_args.dumper = pcap_writer;
+    cb_args.queue_num = queue_num;
+    cb_args.verdict = NF_ACCEPT;
+
+    struct nfq_q_handle *queue = open_queue_or_exit(nfq_lib_ctx, queue_num, &cb_args);
 
     // We want to copy the entirety of the packet.
     if (nfq_set_mode(queue, NFQNL_COPY_PACKET, 65535) < 0) {

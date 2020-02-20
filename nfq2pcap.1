@@ -1,0 +1,57 @@
+.TH nfq2pcap 1 "20th February, 2020"
+.SH \fBNAME\fP
+nfq2pcap \- Read packets from a Netfilter queue and write them to a pcap file
+\
+.SH \fBSYNOPSIS\fP
+\fBnfq2pcap\fP [-o filename] [-q queue] [-t target] [-v verdict]
+\
+.SH \fBDESCRIPTION\fP
+\fBnfq2pcap\fP is a network debugging utility, capable of reading packets
+from a Netfilter queue and then writing those packets to a pcap file.
+
+.SS \fBOPTIONS\fP
+.TP
+\fB-o filename\fP
+The name of the output Pcap file to write packets to. Default: output.pcap
+\
+.TP
+\fB-q queue\fP
+The number of the queue that we want to read from. Default: 0
+\
+.TP
+\fB-t target\fP
+The number of the queue to send packets off to after they've been written to
+the Pcap file. Only relevant if the \fBverdict\fP is NF_QUEUE (3)
+\
+.TP
+\fB-v verdict\fP
+The Netfilter verdict code to return. Currently has to be specified as an integer.
+Values for the supported Netfilter verdicts are listed below:
+
+  NF_DROP   0
+  NF_ACCEPT 1
+  NF_QUEUE  3
+\
+.SH
+\fBEXAMPLES\fP
+Given here are some example command lines for using \fBnfq2pcap\fP.
+.IP
+nfq2pcap
+.PP
+Use all default arguments. This will listen to queue number 0 (zero),
+writing packets to \fBoutput.pcap\fP, and issue a verdict of NF_ACCEPT
+
+.IP
+nfq2pcap -o mitm.pcap -q 117 -t 120 -v 3
+.PP
+The above command will read from queue number 117, write the packets to
+\fBmitm.pcap\fP, and use the NF_QUEUE verdict to forward packets onto
+queue number 120.
+
+This is useful for intercepting traffic being fed into a Netfilter Queue-using
+service without affecting the operation of that service. Great for debugging!
+\
+.SH
+\fBAUTHOR\fP
+Owen Klan. E-mail me with comments, questions or even suggestions at
+\fBowen dot j dot klan at gmail dot com\fP

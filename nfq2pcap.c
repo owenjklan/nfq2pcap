@@ -33,13 +33,13 @@ void usage(char *progname) {
     fprintf(stderr,
         "Options:\n");
     fprintf(stderr,
-        "  -o filename  Name of output pcap file. Default: %s\n",
+        "  -o filename  Name of output pcap file. Default: %s\n\n",
         DEFAULT_OUT_FILENAME);
     fprintf(stderr,
-        "  -q queue     NFQUEUE ID to read packets from. Default: %d\n",
+        "  -q queue     NFQUEUE ID to read packets from. Default: %d\n\n",
         DEFAULT_QUEUE_ID);
     fprintf(stderr,
-        "  -t target    NFQUEUE ID to read packets from. Default: %d\n",
+        "  -t target    NFQUEUE ID to read packets from. Default: %d\n\n",
         DEFAULT_TARGET_ID);
     fprintf(stderr,
         "  -v verdict   Netfilter verdict code to use for packets. Default: %d\n",
@@ -179,11 +179,6 @@ int main(int argc, char *argv[])
 {
     char pcap_errbuff[PCAP_ERRBUF_SIZE];
     callback_args cb_args;
-
-    if (argc < 2) {
-        usage(argv[0]);
-        exit(1);
-    }
 
     cb_args.verdict =         DEFAULT_VERDICT;
     cb_args.queue_num =       DEFAULT_QUEUE_ID;

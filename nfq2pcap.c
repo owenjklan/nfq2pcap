@@ -25,16 +25,31 @@
 #include "nfq2pcap.h"
 
 void usage(char *progname) {
-    fprintf(stderr, "USAGE:\n");
-    fprintf(stderr, "  %s output [-q queue]\n\n", progname);
-    fprintf(stderr, "Where:\n");
     fprintf(stderr,
-        "  \033[1moutput\033[0m is the name of the output Pcap file\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Options:\n");
+        "USAGE:\n");
     fprintf(stderr,
-        "  -q queue       NFQUEUE ID to read packets from. Default: %d\n",
+        "  %s [-o filename] [-q queue] [-t target] [-v verdict]\n\n",
+        progname);
+    fprintf(stderr,
+        "Options:\n");
+    fprintf(stderr,
+        "  -o filename  Name of output pcap file. Default: %s\n",
+        DEFAULT_OUT_FILENAME);
+    fprintf(stderr,
+        "  -q queue     NFQUEUE ID to read packets from. Default: %d\n",
         DEFAULT_QUEUE_ID);
+    fprintf(stderr,
+        "  -t target    NFQUEUE ID to read packets from. Default: %d\n",
+        DEFAULT_TARGET_ID);
+    fprintf(stderr,
+        "  -v verdict   Netfilter verdict code to use for packets. Default: %d\n",
+        DEFAULT_VERDICT);
+    fprintf(stderr,
+        "\nValid values for verdict are:\n");
+    fprintf(stderr, "  NF_DROP    0\n");
+    fprintf(stderr, "  NF_ACCEPT  1\n");
+    fprintf(stderr, "  NF_QUEUE   3\n");
+    fprintf(stderr, "\n");
 }
 
 // Prepend a custom constructed link layer header to the payload data that
@@ -106,6 +121,16 @@ struct nfq_q_handle *open_queue_or_exit(struct nfq_handle *nfq_lib_ctx,
                                         uint16_t queue_num,
                                         callback_args *cb_args)
 {
+#ifdef DEBUG
+    fprintf(stderr, "Writing output PCAP file to: %s\n",
+        cb_args->output_filename);
+    fprintf(stderr, "Using verdict of %s. Listening on queue #%d\n",
+        verdict_to_str(cb_args->verdict), cb_args->queue_num);
+    if (cb_args->verdict == NF_QUEUE) {
+        fprintf(stderr, "Target Queue: %d\n", cb_args->target_queue);
+    }
+#endif      // DEBUG
+
     // Create our queue handle
     struct nfq_q_handle *nfq_h = nfq_create_queue(nfq_lib_ctx,
                                                   queue_num,
@@ -121,15 +146,51 @@ struct nfq_q_handle *open_queue_or_exit(struct nfq_handle *nfq_lib_ctx,
     return nfq_h;
 }
 
+
+void parse_args(int argc, char *argv[], callback_args *args)
+{
+    int c;
+    opterr = 0;
+    while ((c = getopt(argc, argv, "ho:q:t:v:")) != EOF) {
+        switch (c) {
+            case 'h':
+                usage(argv[0]);
+                exit(0);
+            case 'o':
+                args->output_filename = optarg;
+                break;
+            case 't':
+                args->target_queue = atoi(optarg);
+                break;
+            case 'q':
+                args->queue_num = atoi(optarg);
+                break;
+            case 'v':
+                args->verdict = atoi(optarg);
+                break;
+            default:
+                fprintf(stderr, "Unknown option! %c\n", c);
+        }
+    }
+}
+
+
 int main(int argc, char *argv[])
 {
     char pcap_errbuff[PCAP_ERRBUF_SIZE];
+    callback_args cb_args;
 
     if (argc < 2) {
         usage(argv[0]);
         exit(1);
     }
-    char *output_filename = argv[1];
+
+    cb_args.verdict =         DEFAULT_VERDICT;
+    cb_args.queue_num =       DEFAULT_QUEUE_ID;
+    cb_args.output_filename = DEFAULT_OUT_FILENAME;
+    cb_args.target_queue =    DEFAULT_TARGET_ID;
+
+    parse_args(argc, argv, &cb_args);
 
     // Open Pcap file and handles for writing packets out using pcap_dump()
     // We're going to use DLT_NULL, as we won't have Ethernet frame headers
@@ -137,17 +198,19 @@ int main(int argc, char *argv[])
     pcap_t *pcap_h = pcap_open_dead(DLT_NULL, 65536);
     if (!pcap_h) {
         error_msg("Failed opening '%s' as pcap output file! %s.\n",
-            output_filename, pcap_errbuff);
+            cb_args.output_filename, pcap_errbuff);
         exit(1);
     }
 
-    pcap_dumper_t *pcap_writer = pcap_dump_open(pcap_h, output_filename);
+    pcap_dumper_t *pcap_writer = pcap_dump_open(
+        pcap_h, cb_args.output_filename);
     if (!pcap_writer) {
         error_msg("Failed creating dumper handle for pcap! %s.\n",
             pcap_geterr(pcap_h));
         pcap_close(pcap_h);
         exit(1);
     }
+    cb_args.dumper = pcap_writer;   // Update the callback args
 
     // Initialise a handle for the netfilter_queue library
     struct nfq_handle *nfq_lib_ctx = nfq_open();
@@ -156,15 +219,9 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    uint32_t queue_num = DEFAULT_QUEUE_ID;
 
-    callback_args cb_args;
-
-    cb_args.dumper = pcap_writer;
-    cb_args.queue_num = queue_num;
-    cb_args.verdict = NF_ACCEPT;
-
-    struct nfq_q_handle *queue = open_queue_or_exit(nfq_lib_ctx, queue_num, &cb_args);
+    struct nfq_q_handle *queue = open_queue_or_exit(
+        nfq_lib_ctx, cb_args.queue_num, &cb_args);
 
     // We want to copy the entirety of the packet.
     if (nfq_set_mode(queue, NFQNL_COPY_PACKET, 65535) < 0) {

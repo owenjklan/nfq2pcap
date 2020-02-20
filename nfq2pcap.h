@@ -6,7 +6,11 @@
 #include <pcap/pcap.h>
 
 
+#define DEFAULT_OUT_FILENAME "output.pcap"
+
 #define DEFAULT_QUEUE_ID    0
+
+#define DEFAULT_TARGET_ID   1
 
 #define PACKET_BUFF_MAX 65535
 
@@ -20,9 +24,27 @@
 
 // Arguments passed into the callback as user-supplied args
 typedef struct _callback_args {
-	pcap_dumper_t 	*dumper;
-	uint32_t		verdict;
-	uint32_t		queue_num;		// Only relevant if verdict == NF_QUEUE
+    pcap_dumper_t   *dumper;
+    uint32_t        verdict;
+    uint32_t        queue_num;
+    uint32_t        target_queue;   // Only relevant if verdict == NF_QUEUE
+    char *          output_filename;
 } callback_args;
+
+static inline char *verdict_to_str(uint32_t verdict)
+{
+    switch (verdict) {
+        case NF_DROP:
+            return "NF_DROP";
+        case NF_ACCEPT:
+            return "NF_ACCEPT";
+        // TODO: Add appropriate code to free/dispose of packets when done
+        // case NF_STOLEN:
+        //     return "NF_STOLEN";
+        case NF_QUEUE:
+            return "NF_QUEUE";
+    }
+    return "Unknown or Unsupported";
+};
 
 #endif  /* __NFQ_2_PCAP_H__ */

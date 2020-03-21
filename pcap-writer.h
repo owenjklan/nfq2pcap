@@ -5,7 +5,7 @@
 #define __PCAP_WRITER_H__
 
 #include <stdio.h>
-#include <stdint.n>
+#include <stdint.h>
 
 const uint32_t PCAP_MAGIC_NUMBER = 0xa1b2c3d4;
 

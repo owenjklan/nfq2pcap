@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdbool.h>
 
 #include "pcap-writer.h"
@@ -57,7 +58,7 @@ PcapWriter *pcap_writer_new(char *filename,
     // Duplicate file name string
     new_writer->filename = strdup(filename);
     if (new_writer->filename == NULL) {
-        free(file_header)
+        free(file_header);
         free(new_writer);
         return NULL;
     }
@@ -68,7 +69,7 @@ PcapWriter *pcap_writer_new(char *filename,
     new_writer->header_written = false;
 
     // Open the output file
-    FILE *out_file = NULL
+    FILE *out_file = NULL;
     out_file = fopen(filename, "wb");
     if (out_file == NULL) {
         pcap_file_header_free(file_header);

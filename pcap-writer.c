@@ -82,7 +82,35 @@ PcapWriter *pcap_writer_new(char *filename,
     return new_writer;
 }
 
-void pcap_writer_close(PcapWriter *writer) {
+static int pcap_writer_write_header(PcapWriter *writer)
+{
+    if (writer == NULL || writer->file == NULL) { return; }
+    if (writer->header_written == true) { return; }
+
+    size_t written_bytes = 0;
+
+    written_bytes = fwrite(writer->file_header, 1, sizeof(PcapFileHeader),
+                           writer->file);
+
+    if (written_bytes < sizeof(PcapFileHeader)) {
+        return false;
+    }
+
+    writer->header_written = true;
+    fflush(writer->file);
+    writer->bytes_written += written_bytes;
+
+    return true;
+}
+
+uint32_t pcap_writer_write_packet(PcapWriter *writer, char *packet_data,
+                                  uint32_t data_len, uint32_t real_len)
+{
+
+}
+
+void pcap_writer_close(PcapWriter *writer)
+{
     if (writer == NULL || writer->file == NULL) { return; }
     fclose(writer->file);
     writer->file = NULL;
@@ -102,3 +130,4 @@ void pcap_writer_free(PcapWriter *writer)
     if (writer->file != NULL) { pcap_writer_close(writer); }
     free(writer);
 }
+

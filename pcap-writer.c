@@ -3,7 +3,22 @@
 #include <string.h>
 #include <stdbool.h>
 
+#include <sys/time.h>
+
 #include "pcap-writer.h"
+
+
+static inline void get_packet_timestamp(PcapPacketHeader *packet_header)
+{
+    struct timeval tv;
+
+    // TODO: More robust error handling? Might be overkill for our particular
+    //       use-case though??
+    if (gettimeofday(&tv, NULL) != 0) { return; }
+
+    packet_header->ts_sec = tv.tv_sec;
+    packet_header->ts_usec = tv.tv_usec;
+}
 
 static PcapFileHeader *pcap_file_header_new(uint32_t snaplen,
                                             uint32_t dll_type)
@@ -84,8 +99,8 @@ PcapWriter *pcap_writer_new(char *filename,
 
 static int pcap_writer_write_header(PcapWriter *writer)
 {
-    if (writer == NULL || writer->file == NULL) { return; }
-    if (writer->header_written == true) { return; }
+    if (writer == NULL || writer->file == NULL) { return true; }
+    if (writer->header_written == true) { return true; }
 
     size_t written_bytes = 0;
 
@@ -103,10 +118,53 @@ static int pcap_writer_write_header(PcapWriter *writer)
     return true;
 }
 
+// Write's a given block of data as a packet. Creates the appropriate
+// header structure.
+// NOTE: It is expected that any link-layer-specific header has been pre-pended
+// and included in the packet_data and
+// Return's boolean indicating success or failure
 uint32_t pcap_writer_write_packet(PcapWriter *writer, char *packet_data,
                                   uint32_t data_len, uint32_t real_len)
 {
+    if (writer == NULL || packet_data == NULL) { return -1; }
+    if (writer->file == NULL) { return -1; }
 
+    // Make sure header has been written
+    if (writer->header_written == false) {
+        pcap_writer_write_header(writer);
+    }
+
+    // Allocate PcapPacketHeader structure on Heap
+    PcapPacketHeader *packet_header = NULL;
+    packet_header = pcap_writer_packet_header_new();
+    if (packet_header == NULL) { return false; }
+
+    // Write the pcap header
+    fwrite(packet_header, 1, sizeof(PcapPacketHeader), writer->file);
+
+    // Write packet-data, including Link-layer header
+    fwrite(packet_data, 1, data_len, writer->file);
+
+    fflush(writer->file);
+    writer->bytes_written += sizeof(PcapPacketHeader);
+    writer->bytes_written += data_len;
+    writer->packets_written++;
+
+    pcap_writer_packet_header_free(packet_header);
+
+    return true;
+}
+
+// Return allocated packet header structure with timestamps filled in
+// Return's NULL on failure
+PcapPacketHeader *pcap_writer_packet_header_new()
+{
+    PcapPacketHeader *new_header = NULL;
+
+    new_header = (PcapPacketHeader *)calloc(1, sizeof(PcapPacketHeader));
+    if (new_header == NULL) { return NULL; }
+    get_packet_timestamp(new_header);
+    return new_header;
 }
 
 void pcap_writer_close(PcapWriter *writer)
@@ -114,6 +172,12 @@ void pcap_writer_close(PcapWriter *writer)
     if (writer == NULL || writer->file == NULL) { return; }
     fclose(writer->file);
     writer->file = NULL;
+}
+
+void pcap_writer_packet_header_free(PcapPacketHeader *header)
+{
+    if (header == NULL) { return; }
+    free(header);
 }
 
 void pcap_writer_free(PcapWriter *writer)
@@ -130,4 +194,3 @@ void pcap_writer_free(PcapWriter *writer)
     if (writer->file != NULL) { pcap_writer_close(writer); }
     free(writer);
 }
-

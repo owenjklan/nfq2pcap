@@ -47,4 +47,6 @@ PcapWriter *pcap_writer_new(char *filename,
                             uint32_t dll_type);
 void pcap_writer_free(PcapWriter *writer);
 void pcap_writer_close(PcapWriter *writer);
+PcapPacketHeader *pcap_writer_packet_header_new();
+void pcap_writer_packet_header_free(PcapPacketHeader *header);
 #endif  /* End __PCAP_WRITER_H__ */

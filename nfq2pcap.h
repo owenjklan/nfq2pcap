@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 #include <linux/netfilter.h>  // For NF_ACCEPT
-#include <pcap/pcap.h>
 
+#include "pcap-writer.h"
 
 #define DEFAULT_OUT_FILENAME "output.pcap"
 
@@ -13,6 +13,8 @@
 #define DEFAULT_TARGET_ID   1
 
 #define PACKET_BUFF_MAX 65535
+
+#define DEFAULT_SNAPLEN 65535
 
 #define DEFAULT_VERDICT     NF_ACCEPT
 
@@ -24,7 +26,7 @@
 
 // Arguments passed into the callback as user-supplied args
 typedef struct _callback_args {
-    pcap_dumper_t   *dumper;
+    PcapWriter      *writer;
     uint32_t        verdict;
     uint32_t        queue_num;
     uint32_t        target_queue;   // Only relevant if verdict == NF_QUEUE

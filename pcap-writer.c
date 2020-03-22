@@ -93,6 +93,8 @@ PcapWriter *pcap_writer_new(char *filename,
         return NULL;
     }
 
+    new_writer->file = out_file;
+
     // We made it!
     return new_writer;
 }
@@ -115,6 +117,8 @@ static int pcap_writer_write_header(PcapWriter *writer)
     fflush(writer->file);
     writer->bytes_written += written_bytes;
 
+    printf("PCAP header written\n");
+
     return true;
 }
 
@@ -123,7 +127,8 @@ static int pcap_writer_write_header(PcapWriter *writer)
 // NOTE: It is expected that any link-layer-specific header has been pre-pended
 // and included in the packet_data and
 // Return's boolean indicating success or failure
-uint32_t pcap_writer_write_packet(PcapWriter *writer, char *packet_data,
+uint32_t pcap_writer_write_packet(PcapWriter *writer,
+                                  unsigned char *packet_data,
                                   uint32_t data_len, uint32_t real_len)
 {
     if (writer == NULL || packet_data == NULL) { return -1; }
@@ -139,11 +144,25 @@ uint32_t pcap_writer_write_packet(PcapWriter *writer, char *packet_data,
     packet_header = pcap_writer_packet_header_new();
     if (packet_header == NULL) { return false; }
 
-    // Write the pcap header
-    fwrite(packet_header, 1, sizeof(PcapPacketHeader), writer->file);
+    // Note: It appears we need to include the length of the link-layer header
+    //       as such, we use the passed in data_len as the included length
+    packet_header->included_len = data_len;
+    packet_header->real_len = real_len;
+
+    printf("PH->included_len:        %d\n", packet_header->included_len);
+    printf("PH->real_len:            %d\n", packet_header->real_len);
+
+    // Write the pcap packet header
+    int bytes_written = fwrite(packet_header,
+                               1, sizeof(PcapPacketHeader),
+                               writer->file);
+    printf("Wrote %d of %d bytes for packet header\n", bytes_written, sizeof(PcapPacketHeader));
 
     // Write packet-data, including Link-layer header
-    fwrite(packet_data, 1, data_len, writer->file);
+    bytes_written = fwrite(packet_data,
+                           1, data_len,
+                           writer->file);
+    printf("Wrote %d of %d bytes for packet data\n", bytes_written, data_len);
 
     fflush(writer->file);
     writer->bytes_written += sizeof(PcapPacketHeader);

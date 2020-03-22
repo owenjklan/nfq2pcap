@@ -7,11 +7,13 @@
 #include <stdio.h>
 #include <stdint.h>
 
-const uint32_t PCAP_MAGIC_NUMBER = 0xa1b2c3d4;
+#define PCAP_MAGIC_NUMBER  0xa1b2c3d4
 
 // PCAP file version numbers, current as of March 2020
-const uint16_t PCAP_MAJOR_VERSION = 2;
-const uint16_t PCAP_MINOR_VERSION = 4;
+// const uint16_t PCAP_MAJOR_VERSION = 2;
+// const uint16_t PCAP_MINOR_VERSION = 4;
+#define PCAP_MAJOR_VERSION  2
+#define PCAP_MINOR_VERSION  4
 
 typedef struct _pcap_file_header {
     uint32_t    magic_number;
@@ -47,6 +49,27 @@ PcapWriter *pcap_writer_new(char *filename,
                             uint32_t dll_type);
 void pcap_writer_free(PcapWriter *writer);
 void pcap_writer_close(PcapWriter *writer);
+uint32_t pcap_writer_write_packet(PcapWriter *writer,
+                                  unsigned char *packet_data,
+                                  uint32_t data_len, uint32_t real_len);
 PcapPacketHeader *pcap_writer_packet_header_new();
 void pcap_writer_packet_header_free(PcapPacketHeader *header);
+
+// Data Link Type (DLT_) definitions.
+// Obtained from information at: http://www.tcpdump.org/linktypes.html
+// (Mar 2020).
+// Only a select few have been included here
+#define     DLT_NULL                0
+#define     DLT_EN10MB              1
+#define     DLT_AX25                3
+#define     DLT_IEEE802             6
+#define     DLT_ARCNET              7
+#define     DLT_SLIP                8
+#define     DLT_PPP                 9
+#define     DLT_FDDI                10
+#define     DLT_PPP_SERIAL          50
+
+#define     DLT_IPV4                228     // Packet begins with raw IPV4
+#define     DLT_IPV6                229     // Packet begins with raw IPV6
+
 #endif  /* End __PCAP_WRITER_H__ */

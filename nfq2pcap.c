@@ -20,8 +20,6 @@
 #include <linux/netfilter.h>  // For NF_ACCEPT
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
-#include <pcap/pcap.h>
-
 #include "nfq2pcap.h"
 
 void usage(char *progname) {
@@ -84,7 +82,7 @@ int queue_callback(struct nfq_q_handle *nfq_h,
 {
     uint32_t null_header = 2;  // 2 -> IPv4 packets
     struct nfqnl_msg_packet_hdr *ph = nfq_get_msg_packet_hdr(nfad);
-    pcap_dumper_t *pcap_writer = ((callback_args *)data)->dumper;
+    PcapWriter *pcap_writer = ((callback_args *)data)->writer;
     uint32_t verdict = ((callback_args *)data)->verdict;
 
     unsigned char *raw_data = NULL;
@@ -92,22 +90,21 @@ int queue_callback(struct nfq_q_handle *nfq_h,
     int packet_len = nfq_get_payload(nfad, &raw_data);
 
     // 'Final', as in, we've pre-pended the fake link layer header
-    unsigned char *final_payload = prepend_link_header((unsigned char *)&null_header,
-                                              sizeof(null_header),
-                                              raw_data,
-                                              packet_len);
+    unsigned char *final_payload = prepend_link_header(
+                                            (unsigned char *)&null_header,
+                                            sizeof(null_header),
+                                            raw_data,
+                                            packet_len);
     int final_len = sizeof(null_header) + packet_len;
 
-    struct pcap_pkthdr header;
-    struct timeval ts;
-    gettimeofday(&ts, NULL);
+    printf("raw_data length:     %d\n", packet_len);
+    printf("sizeof(null_header): %ld\n", sizeof(null_header));
+    printf("final_len:           %d\n", final_len);
 
-    header.ts = ts;
-    header.caplen = header.len = final_len;
+    pcap_writer_write_packet(pcap_writer, final_payload,
+                             final_len, packet_len);
 
-    pcap_dump((u_char *)pcap_writer, &header, final_payload);
     free(final_payload);
-    pcap_dump_flush(pcap_writer);
 
     if (verdict == NF_QUEUE) {
         // The queue to direct to is in upper 16-bits of the verdict we set
@@ -177,7 +174,6 @@ void parse_args(int argc, char *argv[], callback_args *args)
 
 int main(int argc, char *argv[])
 {
-    char pcap_errbuff[PCAP_ERRBUF_SIZE];
     callback_args cb_args;
 
     cb_args.verdict =         DEFAULT_VERDICT;
@@ -187,33 +183,24 @@ int main(int argc, char *argv[])
 
     parse_args(argc, argv, &cb_args);
 
-    // Open Pcap file and handles for writing packets out using pcap_dump()
-    // We're going to use DLT_NULL, as we won't have Ethernet frame headers
-    // coming off an NFQUEUE
-    pcap_t *pcap_h = pcap_open_dead(DLT_NULL, 65536);
-    if (!pcap_h) {
-        error_msg("Failed opening '%s' as pcap output file! %s.\n",
-            cb_args.output_filename, pcap_errbuff);
-        exit(1);
-    }
-
-    pcap_dumper_t *pcap_writer = pcap_dump_open(
-        pcap_h, cb_args.output_filename);
+    // Open our Pcap writer. Hard-coding (gross), for now (sure...) snaplen
+    // and Data link type to be NULL.
+    PcapWriter *pcap_writer = pcap_writer_new(cb_args.output_filename,
+                                              DEFAULT_SNAPLEN, DLT_NULL);
     if (!pcap_writer) {
-        error_msg("Failed creating dumper handle for pcap! %s.\n",
-            pcap_geterr(pcap_h));
-        pcap_close(pcap_h);
+        error_msg("Failed creating pcap file writer! %s.\n",
+            strerror(errno));
         exit(1);
     }
-    cb_args.dumper = pcap_writer;   // Update the callback args
+    cb_args.writer = pcap_writer;   // Update the callback args
 
     // Initialise a handle for the netfilter_queue library
     struct nfq_handle *nfq_lib_ctx = nfq_open();
     if (!nfq_lib_ctx) {
         error_msg("Failed opening library handle! %s", strerror(errno));
+        pcap_writer_close(pcap_writer);
         exit(1);
     }
-
 
     struct nfq_q_handle *queue = open_queue_or_exit(
         nfq_lib_ctx, cb_args.queue_num, &cb_args);
@@ -223,6 +210,7 @@ int main(int argc, char *argv[])
         error_msg("Failed setting copy mode! %s", strerror(errno));
         nfq_destroy_queue(queue);
         nfq_close(nfq_lib_ctx);
+        pcap_writer_close(pcap_writer);
         exit(1);
     }
 

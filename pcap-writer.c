@@ -131,8 +131,8 @@ uint32_t pcap_writer_write_packet(PcapWriter *writer,
                                   unsigned char *packet_data,
                                   uint32_t data_len, uint32_t real_len)
 {
-    if (writer == NULL || packet_data == NULL) { return -1; }
-    if (writer->file == NULL) { return -1; }
+    if (writer == NULL || packet_data == NULL) { return false; }
+    if (writer->file == NULL) { return false; }
 
     // Make sure header has been written
     if (writer->header_written == false) {

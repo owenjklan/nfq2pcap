@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -27,7 +28,7 @@
 
 // Global flag to indicate we should keep running.
 // It's global so it can be changed by the SIGINT handler
-uint32_t keep_looping = 1;
+uint32_t keep_looping = true;
 
 
 void usage(char *progname) {
@@ -181,13 +182,13 @@ void parse_args(int argc, char *argv[], callback_args *args)
 // cleanup.
 void handle_sigint(int signum)
 {
-    if (keep_looping == 0) {
+    if (keep_looping == false) {
         fprintf(stderr, "\n --- Hard Exit, not cleaning up! ---\n");
         exit(1);
     }
 
     fprintf(stderr, "\n --- Interrupted ---\n");
-    keep_looping = 0;    // Break the main queue processing loop
+    keep_looping = false;    // Break the main queue processing loop
 }
 
 // After all handles that should be explicitly released have been
@@ -259,7 +260,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    while (keep_looping) {
+    while (keep_looping == true) {
         int read_len = read(nl_fd, packet_buff, PACKET_BUFF_MAX);
         if (read_len < 0) {
             error_msg("Issue reading packet! %s", strerror(errno));

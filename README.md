@@ -1,5 +1,7 @@
 # nfq2pcap
-Proof-of-concept to read packets from an NFQUEUE and write them to a pcap file.
+Network utility to read packets from an NFQUEUE and write them to a pcap file. Currently only
+supports the "raw" Data Link types, meaning raw IPv4 or IPv6 packets are the only supported
+output file formats. IPv4 is the default.
 
 ## Example iptables rules for testing
 For packets coming from www.example.com:

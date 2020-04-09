@@ -24,14 +24,15 @@ Options:
 
   -q queue     NFQUEUE ID to read packets from. Default: 0
 
-  -t target    NFQUEUE ID to read packets from. Default: 1
+  -t target    NFQUEUE ID to write packets to. Default: 1
+               (Only relevant when a verdict of QUEUE (3) is used.
 
   -v verdict   Netfilter verdict code to use for packets. Default: 1
 
 Valid values for verdict are:
-  NF_DROP    0
-  NF_ACCEPT  1
-  NF_QUEUE   3
+  DROP    0
+  ACCEPT  1
+  QUEUE   3
 
 ```
 ## Pass-thru configuration

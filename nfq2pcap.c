@@ -12,6 +12,9 @@
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>         // wanted for getopt() and others
+
+#include <signal.h>
+
 #include <time.h>
 #include <sys/time.h>
 #include <sys/select.h>
@@ -21,6 +24,11 @@
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
 #include "nfq2pcap.h"
+
+// Global flag to indicate we should keep running.
+// It's global so it can be changed by the SIGINT handler
+uint32_t keep_looping = 1;
+
 
 void usage(char *progname) {
     fprintf(stderr,
@@ -168,6 +176,34 @@ void parse_args(int argc, char *argv[], callback_args *args)
     }
 }
 
+// First time we get SIGINT, indicate to the main loop to break and wait
+// for our chance to finish. Second time, we will call exit and bypass all
+// cleanup.
+void handle_sigint(int signum)
+{
+    if (keep_looping == 0) {
+        fprintf(stderr, "\n --- Hard Exit, not cleaning up! ---\n");
+        exit(1);
+    }
+
+    fprintf(stderr, "\n --- Interrupted ---\n");
+    keep_looping = 0;    // Break the main queue processing loop
+}
+
+// After all handles that should be explicitly released have been
+// created, errors could still happen. This prevents repetition of the
+// same release functions whenever an error happens.
+//
+// This also has the side-effect that this function can be called once the
+// main loop has been broken and the program is about to exit.
+void full_cleanup(struct nfq_q_handle *queue,
+                  struct nfq_handle *nfq_lib_ctx,
+                  PcapWriter *pcap_writer)
+{
+    nfq_destroy_queue(queue);
+    nfq_close(nfq_lib_ctx);
+    pcap_writer_close(pcap_writer);
+}
 
 int main(int argc, char *argv[])
 {
@@ -207,9 +243,6 @@ int main(int argc, char *argv[])
     // We want to copy the entirety of the packet.
     if (nfq_set_mode(queue, NFQNL_COPY_PACKET, 65535) < 0) {
         error_msg("Failed setting copy mode! %s", strerror(errno));
-        nfq_destroy_queue(queue);
-        nfq_close(nfq_lib_ctx);
-        pcap_writer_close(pcap_writer);
         exit(1);
     }
 
@@ -217,7 +250,16 @@ int main(int argc, char *argv[])
     int nl_fd = nfq_fd(nfq_lib_ctx);
     char packet_buff[PACKET_BUFF_MAX];
 
-    while (1) {
+    // Set up SIGINT handler so we can clean up properly. Ultimately,
+    // this will help us test memory leaks with Valgrind, as well.
+    if (signal(SIGINT, handle_sigint) == SIG_ERR) {
+        error_msg("Failed installing signal handler for SIGINT! %s\n",
+            strerror(errno));
+        full_cleanup(queue, nfq_lib_ctx, pcap_writer);
+        exit(1);
+    }
+
+    while (keep_looping) {
         int read_len = read(nl_fd, packet_buff, PACKET_BUFF_MAX);
         if (read_len < 0) {
             error_msg("Issue reading packet! %s", strerror(errno));
@@ -227,6 +269,9 @@ int main(int argc, char *argv[])
         // Actually handle the packet
         nfq_handle_packet(nfq_lib_ctx, packet_buff, read_len);
     }
+
+    // Cleanup everything
+    full_cleanup(queue, nfq_lib_ctx, pcap_writer);
 
     return 0;
 }

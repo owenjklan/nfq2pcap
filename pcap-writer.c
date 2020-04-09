@@ -155,10 +155,15 @@ uint32_t pcap_writer_write_packet(PcapWriter *writer,
                                1, sizeof(PcapPacketHeader),
                                writer->file);
 
-    // Write packet-data, including Link-layer header
+        // Write packet-data, including Link-layer header
     bytes_written = fwrite(packet_data,
                            1, data_len,
                            writer->file);
+
+    if (bytes_written != data_len) {
+        fprintf(stderr, "Mismatch of bytes written (%d) versus expected (%d)!\n",
+            bytes_written, data_len);
+    }
 
     fflush(writer->file);
     writer->bytes_written += sizeof(PcapPacketHeader);

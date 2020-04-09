@@ -51,7 +51,9 @@ void pcap_writer_free(PcapWriter *writer);
 void pcap_writer_close(PcapWriter *writer);
 uint32_t pcap_writer_write_packet(PcapWriter *writer,
                                   unsigned char *packet_data,
-                                  uint32_t data_len, uint32_t real_len);
+                                  uint32_t ll_header_len,
+                                  uint32_t data_len,
+                                  uint32_t real_len);
 PcapPacketHeader *pcap_writer_packet_header_new();
 void pcap_writer_packet_header_free(PcapPacketHeader *header);
 

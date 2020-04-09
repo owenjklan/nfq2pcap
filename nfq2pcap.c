@@ -26,10 +26,14 @@ void usage(char *progname) {
     fprintf(stderr,
         "USAGE:\n");
     fprintf(stderr,
-        "  %s [-o filename] [-q queue] [-t target] [-v verdict]\n\n",
+        "  %s [-h] [-6] [-o filename] [-q queue] [-t target] [-v verdict]\n\n",
         progname);
     fprintf(stderr,
         "Options:\n");
+    fprintf(stderr,
+        "  -6           Capture as RAW IPv6 packets.\n\n");
+    fprintf(stderr,
+        "  -h           Display usage information / help.\n\n");
     fprintf(stderr,
         "  -o filename  Name of output pcap file. Default: %s\n\n",
         DEFAULT_OUT_FILENAME);
@@ -80,7 +84,6 @@ int queue_callback(struct nfq_q_handle *nfq_h,
                    struct nfq_data *nfad,
                    void *data)
 {
-    uint32_t null_header = 2;  // 2 -> IPv4 packets
     struct nfqnl_msg_packet_hdr *ph = nfq_get_msg_packet_hdr(nfad);
     PcapWriter *pcap_writer = ((callback_args *)data)->writer;
     uint32_t verdict = ((callback_args *)data)->verdict;
@@ -89,22 +92,9 @@ int queue_callback(struct nfq_q_handle *nfq_h,
 
     int packet_len = nfq_get_payload(nfad, &raw_data);
 
-    // 'Final', as in, we've pre-pended the fake link layer header
-    unsigned char *final_payload = prepend_link_header(
-                                            (unsigned char *)&null_header,
-                                            sizeof(null_header),
-                                            raw_data,
-                                            packet_len);
-    int final_len = sizeof(null_header) + packet_len;
-
-    printf("raw_data length:     %d\n", packet_len);
-    printf("sizeof(null_header): %ld\n", sizeof(null_header));
-    printf("final_len:           %d\n", final_len);
-
-    pcap_writer_write_packet(pcap_writer, final_payload,
-                             final_len, packet_len);
-
-    free(final_payload);
+    pcap_writer_write_packet(pcap_writer, raw_data,
+                             0,
+                             packet_len, packet_len);
 
     if (verdict == NF_QUEUE) {
         // The queue to direct to is in upper 16-bits of the verdict we set
@@ -148,7 +138,7 @@ void parse_args(int argc, char *argv[], callback_args *args)
 {
     int c;
     opterr = 0;
-    while ((c = getopt(argc, argv, "ho:q:t:v:")) != EOF) {
+    while ((c = getopt(argc, argv, "h6o:q:t:v:")) != EOF) {
         switch (c) {
             case 'h':
                 usage(argv[0]);
@@ -165,6 +155,12 @@ void parse_args(int argc, char *argv[], callback_args *args)
             case 'v':
                 args->verdict = atoi(optarg);
                 break;
+            case '6':
+                args->dlt = DLT_IPV6;
+#ifdef DEBUG
+                fprintf(stderr, "IPv6 Mode\n");
+#endif
+                break;
             default:
                 fprintf(stderr, "Unknown option! %c\n", c);
         }
@@ -180,13 +176,15 @@ int main(int argc, char *argv[])
     cb_args.queue_num =       DEFAULT_QUEUE_ID;
     cb_args.output_filename = DEFAULT_OUT_FILENAME;
     cb_args.target_queue =    DEFAULT_TARGET_ID;
+    cb_args.dlt =             DEFAULT_DLT_RAWIPV4;
 
     parse_args(argc, argv, &cb_args);
 
     // Open our Pcap writer. Hard-coding (gross), for now (sure...) snaplen
     // and Data link type to be NULL.
     PcapWriter *pcap_writer = pcap_writer_new(cb_args.output_filename,
-                                              DEFAULT_SNAPLEN, DLT_NULL);
+                                              DEFAULT_SNAPLEN,
+                                              cb_args.dlt);
     if (!pcap_writer) {
         error_msg("Failed creating pcap file writer! %s.\n",
             strerror(errno));

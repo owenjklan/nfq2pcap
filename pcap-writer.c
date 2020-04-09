@@ -129,7 +129,8 @@ static int pcap_writer_write_header(PcapWriter *writer)
 // Return's boolean indicating success or failure
 uint32_t pcap_writer_write_packet(PcapWriter *writer,
                                   unsigned char *packet_data,
-                                  uint32_t data_len, uint32_t real_len)
+                                  uint32_t ll_header_len, uint32_t data_len,
+                                  uint32_t real_len)
 {
     if (writer == NULL || packet_data == NULL) { return false; }
     if (writer->file == NULL) { return false; }
@@ -149,20 +150,15 @@ uint32_t pcap_writer_write_packet(PcapWriter *writer,
     packet_header->included_len = data_len;
     packet_header->real_len = real_len;
 
-    printf("PH->included_len:        %d\n", packet_header->included_len);
-    printf("PH->real_len:            %d\n", packet_header->real_len);
-
     // Write the pcap packet header
     int bytes_written = fwrite(packet_header,
                                1, sizeof(PcapPacketHeader),
                                writer->file);
-    printf("Wrote %d of %d bytes for packet header\n", bytes_written, sizeof(PcapPacketHeader));
 
     // Write packet-data, including Link-layer header
     bytes_written = fwrite(packet_data,
                            1, data_len,
                            writer->file);
-    printf("Wrote %d of %d bytes for packet data\n", bytes_written, data_len);
 
     fflush(writer->file);
     writer->bytes_written += sizeof(PcapPacketHeader);

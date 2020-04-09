@@ -18,6 +18,8 @@
 
 #define DEFAULT_VERDICT     NF_ACCEPT
 
+#define DEFAULT_DLT_RAWIPV4 DLT_IPV4
+
 // Helper macro to display error messages in bold red text
 #define error_msg(fmt, args...) \
     fprintf(stderr, "\033[1;31m"); \
@@ -31,6 +33,7 @@ typedef struct _callback_args {
     uint32_t        queue_num;
     uint32_t        target_queue;   // Only relevant if verdict == NF_QUEUE
     char *          output_filename;
+    uint32_t        dlt;            // Here so we can send to parse_args()
 } callback_args;
 
 static inline char *verdict_to_str(uint32_t verdict)

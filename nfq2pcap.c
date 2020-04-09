@@ -42,7 +42,7 @@ void usage(char *progname) {
         DEFAULT_QUEUE_ID);
     fprintf(stderr,
         "  -t target    NFQUEUE ID to write packets to. Default: %d\n"
-        "               (Only relevant when a verdict of QUEUE (3) is used.\n",
+        "               (Only relevant when a verdict of QUEUE (3) is used.\n\n",
         DEFAULT_TARGET_ID);
     fprintf(stderr,
         "  -v verdict   Netfilter verdict code to use for packets. Default: %d\n",

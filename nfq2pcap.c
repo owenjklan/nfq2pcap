@@ -41,16 +41,17 @@ void usage(char *progname) {
         "  -q queue     NFQUEUE ID to read packets from. Default: %d\n\n",
         DEFAULT_QUEUE_ID);
     fprintf(stderr,
-        "  -t target    NFQUEUE ID to read packets from. Default: %d\n\n",
+        "  -t target    NFQUEUE ID to write packets to. Default: %d\n"
+        "               (Only relevant when a verdict of QUEUE (3) is used.\n",
         DEFAULT_TARGET_ID);
     fprintf(stderr,
         "  -v verdict   Netfilter verdict code to use for packets. Default: %d\n",
         DEFAULT_VERDICT);
     fprintf(stderr,
         "\nValid values for verdict are:\n");
-    fprintf(stderr, "  NF_DROP    0\n");
-    fprintf(stderr, "  NF_ACCEPT  1\n");
-    fprintf(stderr, "  NF_QUEUE   3\n");
+    fprintf(stderr, "  DROP    0\n");
+    fprintf(stderr, "  ACCEPT  1\n");
+    fprintf(stderr, "  QUEUE   3\n");
     fprintf(stderr, "\n");
 }
 

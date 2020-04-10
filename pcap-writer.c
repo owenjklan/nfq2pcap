@@ -192,6 +192,13 @@ void pcap_writer_close(PcapWriter *writer)
     if (writer == NULL || writer->file == NULL) { return; }
     fclose(writer->file);
     writer->file = NULL;
+    if (writer->file_header != NULL) {
+        free(writer->file_header);
+    }
+    if (writer->filename != NULL) {
+        free(writer->filename);
+    }
+    free(writer);
 }
 
 void pcap_writer_packet_header_free(PcapPacketHeader *header)

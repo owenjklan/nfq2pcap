@@ -1,3 +1,4 @@
+*.tar.gz
 nfq2pcap
 *.o
 *.pcap

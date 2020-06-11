@@ -1,7 +1,7 @@
 PROGNAME=nfq2pcap
 CC=gcc
 CFLAGS=-Wall -O2 -g
-OBJS=nfq2pcap.c pcap-writer.c
+OBJS=nfq2pcap.c pcap-writer.c strings.c
 LIBS=-lc -lnetfilter_queue
 
 .c.o:

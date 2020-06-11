@@ -52,4 +52,7 @@ static inline char *verdict_to_str(uint32_t verdict)
     return "Unknown or Unsupported";
 };
 
+extern char *describe_nfqueue_verdict(uint32_t verdict);
+extern uint32_t verdict_from_str(char *verdict_str);
+
 #endif  /* __NFQ_2_PCAP_H__ */

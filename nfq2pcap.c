@@ -8,10 +8,14 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>         // wanted for getopt() and others
+
+#include <signal.h>
+
 #include <time.h>
 #include <sys/time.h>
 #include <sys/select.h>
@@ -20,18 +24,25 @@
 #include <linux/netfilter.h>  // For NF_ACCEPT
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
-#include <pcap/pcap.h>
-
 #include "nfq2pcap.h"
+
+// Global flag to indicate we should keep running.
+// It's global so it can be changed by the SIGINT handler
+uint32_t keep_looping = true;
+
 
 void usage(char *progname) {
     fprintf(stderr,
         "USAGE:\n");
     fprintf(stderr,
-        "  %s [-o filename] [-q queue] [-t target] [-v verdict]\n\n",
+        "  %s [-h] [-6] [-o filename] [-q queue] [-t target] [-v verdict]\n\n",
         progname);
     fprintf(stderr,
         "Options:\n");
+    fprintf(stderr,
+        "  -6           Capture as RAW IPv6 packets.\n\n");
+    fprintf(stderr,
+        "  -h           Display usage information / help.\n\n");
     fprintf(stderr,
         "  -o filename  Name of output pcap file. Default: %s\n\n",
         DEFAULT_OUT_FILENAME);
@@ -39,16 +50,17 @@ void usage(char *progname) {
         "  -q queue     NFQUEUE ID to read packets from. Default: %d\n\n",
         DEFAULT_QUEUE_ID);
     fprintf(stderr,
-        "  -t target    NFQUEUE ID to read packets from. Default: %d\n\n",
+        "  -t target    NFQUEUE ID to write packets to. Default: %d\n"
+        "               (Only relevant when a verdict of QUEUE (3) is used.\n\n",
         DEFAULT_TARGET_ID);
     fprintf(stderr,
         "  -v verdict   Netfilter verdict code to use for packets. Default: %d\n",
         DEFAULT_VERDICT);
     fprintf(stderr,
         "\nValid values for verdict are:\n");
-    fprintf(stderr, "  NF_DROP    0\n");
-    fprintf(stderr, "  NF_ACCEPT  1\n");
-    fprintf(stderr, "  NF_QUEUE   3\n");
+    fprintf(stderr, "  DROP    0\n");
+    fprintf(stderr, "  ACCEPT  1\n");
+    fprintf(stderr, "  QUEUE   3\n");
     fprintf(stderr, "\n");
 }
 
@@ -82,32 +94,17 @@ int queue_callback(struct nfq_q_handle *nfq_h,
                    struct nfq_data *nfad,
                    void *data)
 {
-    uint32_t null_header = 2;  // 2 -> IPv4 packets
     struct nfqnl_msg_packet_hdr *ph = nfq_get_msg_packet_hdr(nfad);
-    pcap_dumper_t *pcap_writer = ((callback_args *)data)->dumper;
+    PcapWriter *pcap_writer = ((callback_args *)data)->writer;
     uint32_t verdict = ((callback_args *)data)->verdict;
 
     unsigned char *raw_data = NULL;
 
     int packet_len = nfq_get_payload(nfad, &raw_data);
 
-    // 'Final', as in, we've pre-pended the fake link layer header
-    unsigned char *final_payload = prepend_link_header((unsigned char *)&null_header,
-                                              sizeof(null_header),
-                                              raw_data,
-                                              packet_len);
-    int final_len = sizeof(null_header) + packet_len;
-
-    struct pcap_pkthdr header;
-    struct timeval ts;
-    gettimeofday(&ts, NULL);
-
-    header.ts = ts;
-    header.caplen = header.len = final_len;
-
-    pcap_dump((u_char *)pcap_writer, &header, final_payload);
-    free(final_payload);
-    pcap_dump_flush(pcap_writer);
+    pcap_writer_write_packet(pcap_writer, raw_data,
+                             0,
+                             packet_len, packet_len);
 
     if (verdict == NF_QUEUE) {
         // The queue to direct to is in upper 16-bits of the verdict we set
@@ -151,7 +148,7 @@ void parse_args(int argc, char *argv[], callback_args *args)
 {
     int c;
     opterr = 0;
-    while ((c = getopt(argc, argv, "ho:q:t:v:")) != EOF) {
+    while ((c = getopt(argc, argv, "h6o:q:t:v:")) != EOF) {
         switch (c) {
             case 'h':
                 usage(argv[0]);
@@ -168,22 +165,56 @@ void parse_args(int argc, char *argv[], callback_args *args)
             case 'v':
                 args->verdict = atoi(optarg);
                 break;
+            case '6':
+                args->dlt = DLT_IPV6;
+#ifdef DEBUG
+                fprintf(stderr, "IPv6 Mode\n");
+#endif
+                break;
             default:
                 fprintf(stderr, "Unknown option! %c\n", c);
         }
     }
 }
 
+// First time we get SIGINT, indicate to the main loop to break and wait
+// for our chance to finish. Second time, we will call exit and bypass all
+// cleanup.
+void handle_sigint(int signum)
+{
+    if (keep_looping == false) {
+        fprintf(stderr, "\n --- Hard Exit, not cleaning up! ---\n");
+        exit(1);
+    }
+
+    fprintf(stderr, "\n --- Interrupted ---\n");
+    keep_looping = false;    // Break the main queue processing loop
+}
+
+// After all handles that should be explicitly released have been
+// created, errors could still happen. This prevents repetition of the
+// same release functions whenever an error happens.
+//
+// This also has the side-effect that this function can be called once the
+// main loop has been broken and the program is about to exit.
+void full_cleanup(struct nfq_q_handle *queue,
+                  struct nfq_handle *nfq_lib_ctx,
+                  PcapWriter *pcap_writer)
+{
+    nfq_destroy_queue(queue);
+    nfq_close(nfq_lib_ctx);
+    pcap_writer_close(pcap_writer);
+}
 
 int main(int argc, char *argv[])
 {
-    char pcap_errbuff[PCAP_ERRBUF_SIZE];
     callback_args cb_args;
 
     cb_args.verdict =         DEFAULT_VERDICT;
     cb_args.queue_num =       DEFAULT_QUEUE_ID;
     cb_args.output_filename = DEFAULT_OUT_FILENAME;
     cb_args.target_queue =    DEFAULT_TARGET_ID;
+    cb_args.dlt =             DEFAULT_DLT_RAWIPV4;
 
     // Check for root before bothering with anything else
     if (getuid() != 0) {
@@ -193,33 +224,25 @@ int main(int argc, char *argv[])
 
     parse_args(argc, argv, &cb_args);
 
-    // Open Pcap file and handles for writing packets out using pcap_dump()
-    // We're going to use DLT_NULL, as we won't have Ethernet frame headers
-    // coming off an NFQUEUE
-    pcap_t *pcap_h = pcap_open_dead(DLT_NULL, 65536);
-    if (!pcap_h) {
-        error_msg("Failed opening '%s' as pcap output file! %s.\n",
-            cb_args.output_filename, pcap_errbuff);
-        exit(1);
-    }
-
-    pcap_dumper_t *pcap_writer = pcap_dump_open(
-        pcap_h, cb_args.output_filename);
+    // Open our Pcap writer. Hard-coding (gross), for now (sure...) snaplen
+    // and Data link type to be NULL.
+    PcapWriter *pcap_writer = pcap_writer_new(cb_args.output_filename,
+                                              DEFAULT_SNAPLEN,
+                                              cb_args.dlt);
     if (!pcap_writer) {
-        error_msg("Failed creating dumper handle for pcap! %s.\n",
-            pcap_geterr(pcap_h));
-        pcap_close(pcap_h);
+        error_msg("Failed creating pcap file writer! %s.\n",
+            strerror(errno));
         exit(1);
     }
-    cb_args.dumper = pcap_writer;   // Update the callback args
+    cb_args.writer = pcap_writer;   // Update the callback args
 
     // Initialise a handle for the netfilter_queue library
     struct nfq_handle *nfq_lib_ctx = nfq_open();
     if (!nfq_lib_ctx) {
         error_msg("Failed opening library handle! %s", strerror(errno));
+        pcap_writer_close(pcap_writer);
         exit(1);
     }
-
 
     struct nfq_q_handle *queue = open_queue_or_exit(
         nfq_lib_ctx, cb_args.queue_num, &cb_args);
@@ -227,8 +250,6 @@ int main(int argc, char *argv[])
     // We want to copy the entirety of the packet.
     if (nfq_set_mode(queue, NFQNL_COPY_PACKET, 65535) < 0) {
         error_msg("Failed setting copy mode! %s", strerror(errno));
-        nfq_destroy_queue(queue);
-        nfq_close(nfq_lib_ctx);
         exit(1);
     }
 
@@ -236,7 +257,16 @@ int main(int argc, char *argv[])
     int nl_fd = nfq_fd(nfq_lib_ctx);
     char packet_buff[PACKET_BUFF_MAX];
 
-    while (1) {
+    // Set up SIGINT handler so we can clean up properly. Ultimately,
+    // this will help us test memory leaks with Valgrind, as well.
+    if (signal(SIGINT, handle_sigint) == SIG_ERR) {
+        error_msg("Failed installing signal handler for SIGINT! %s\n",
+            strerror(errno));
+        full_cleanup(queue, nfq_lib_ctx, pcap_writer);
+        exit(1);
+    }
+
+    while (keep_looping == true) {
         int read_len = read(nl_fd, packet_buff, PACKET_BUFF_MAX);
         if (read_len < 0) {
             error_msg("Issue reading packet! %s", strerror(errno));
@@ -246,6 +276,9 @@ int main(int argc, char *argv[])
         // Actually handle the packet
         nfq_handle_packet(nfq_lib_ctx, packet_buff, read_len);
     }
+
+    // Cleanup everything
+    full_cleanup(queue, nfq_lib_ctx, pcap_writer);
 
     return 0;
 }

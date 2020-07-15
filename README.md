@@ -1,5 +1,7 @@
 # nfq2pcap
-Proof-of-concept to read packets from an NFQUEUE and write them to a pcap file.
+Network utility to read packets from an NFQUEUE and write them to a pcap file. Currently only
+supports the "raw" Data Link types, meaning raw IPv4 or IPv6 packets are the only supported
+output file formats. IPv4 is the default.
 
 ## Example iptables rules for testing
 For packets coming from www.example.com:
@@ -11,21 +13,27 @@ For packets going to www.example.com:
 ## Usage information
 ```owen@pfhor:~/c/nfq2pcap$ ./nfq2pcap -h
 USAGE:
-  ./nfq2pcap [-o filename] [-q queue] [-t target] [-v verdict]
+  ./nfq2pcap [-h] [-6] [-o filename] [-q queue] [-t target] [-v verdict]
 
 Options:
+  -6           Capture as RAW IPv6 packets.
+
+  -h           Display usage information / help.
+
   -o filename  Name of output pcap file. Default: output.pcap
 
   -q queue     NFQUEUE ID to read packets from. Default: 0
 
-  -t target    NFQUEUE ID to read packets from. Default: 1
+  -t target    NFQUEUE ID to write packets to. Default: 1
+               (Only relevant when a verdict of QUEUE (3) is used.
 
   -v verdict   Netfilter verdict code to use for packets. Default: 1
 
 Valid values for verdict are:
-  NF_DROP    0
-  NF_ACCEPT  1
-  NF_QUEUE   3
+  DROP    0
+  ACCEPT  1
+  QUEUE   3
+
 ```
 ## Pass-thru configuration
 nfq2pcap can be used in a "pass-thru" configuration. Using a verdict of NF_QUEUE (3) and the `-t target`

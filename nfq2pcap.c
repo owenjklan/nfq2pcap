@@ -185,6 +185,12 @@ int main(int argc, char *argv[])
     cb_args.output_filename = DEFAULT_OUT_FILENAME;
     cb_args.target_queue =    DEFAULT_TARGET_ID;
 
+    // Check for root before bothering with anything else
+    if (getuid() != 0) {
+        error_msg("You need to be root to run %s!\n", argv[0]);
+        exit(1);
+    }
+
     parse_args(argc, argv, &cb_args);
 
     // Open Pcap file and handles for writing packets out using pcap_dump()

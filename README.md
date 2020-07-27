@@ -1,8 +1,11 @@
 # nfq2pcap
 Network utility to read packets from an NFQUEUE and write them to a pcap file. Currently only
 supports the "raw" Data Link types, meaning raw IPv4 or IPv6 packets are the only supported
-output file formats. IPv4 is the default. Note that despite the name, the Pcap libraries are
-not required to run!
+output file formats. IPv4 is the default. This may initially seem like a short-coming but
+think about it... NFQUEUE's are fed IPv4/6 packets from iptables, so you don't need to be
+concerning yourself with Link-layer headers or anything like ARP packets.
+
+Note that despite the name, the Pcap libraries are not required to run!
 
 ## Example iptables rules for testing
 For packets coming from www.example.com:

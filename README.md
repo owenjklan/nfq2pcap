@@ -9,10 +9,10 @@ Note that despite the name, the Pcap libraries are not required to run!
 
 ## Example iptables rules for testing
 For packets coming from www.example.com:
-```iptables -t raw -I PREROUTING -s `dig -t a www.example.com +short` -j NFQUEUE --queue-num 100 --queue-bypass```
+<pre>iptables -t raw -I PREROUTING -s `dig -t a www.example.com +short` -j NFQUEUE --queue-num 100 --queue-bypass</pre>
 
 For packets going to www.example.com:
-```iptables -t raw -I OUTPUT -d `dig -t a www.example.com +short` -j NFQUEUE --queue-num 100 --queue-bypass```
+<pre>iptables -t raw -I OUTPUT -d `dig -t a www.example.com +short` -j NFQUEUE --queue-num 100 --queue-bypass</pre>
 
 ## Usage information
 ```owen@pfhor:~/c/nfq2pcap$ ./nfq2pcap -h
